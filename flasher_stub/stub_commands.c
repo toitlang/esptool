@@ -49,7 +49,7 @@ int handle_flash_erase(uint32_t addr, uint32_t len) {
 
   while (len > 0 && (addr % FLASH_BLOCK_SIZE != 0)) {
     #if defined(ESP32S3) && !defined(ESP32S3BETA2)
-        if (ets_efuse_flash_octal_mode()) {
+        if (large_flash_mode) {
           if (esp_rom_opiflash_erase_sector(addr / FLASH_SECTOR_SIZE) != 0) return 0x35;
         } else {
           if (SPIEraseSector(addr / FLASH_SECTOR_SIZE) != 0) return 0x35;
@@ -63,7 +63,7 @@ int handle_flash_erase(uint32_t addr, uint32_t len) {
 
   while (len > FLASH_BLOCK_SIZE) {
     #if defined(ESP32S3) && !defined(ESP32S3BETA2)
-      if (ets_efuse_flash_octal_mode()) {
+      if (large_flash_mode) {
         if (esp_rom_opiflash_erase_block_64k(addr / FLASH_BLOCK_SIZE) != 0) return 0x36;
       } else {
         if (SPIEraseBlock(addr / FLASH_BLOCK_SIZE) != 0) return 0x36;
@@ -77,7 +77,7 @@ int handle_flash_erase(uint32_t addr, uint32_t len) {
 
   while (len > 0) {
     #if defined(ESP32S3) && !defined(ESP32S3BETA2)
-      if (ets_efuse_flash_octal_mode()) {
+      if (large_flash_mode) {
         if (esp_rom_opiflash_erase_sector(addr / FLASH_SECTOR_SIZE) != 0) return 0x37;
       } else {
         if (SPIEraseSector(addr / FLASH_SECTOR_SIZE) != 0) return 0x37;
@@ -112,7 +112,7 @@ void handle_flash_read(uint32_t addr, uint32_t len, uint32_t block_size,
       uint32_t n = len - num_sent;
       if (n > block_size) n = block_size;
       #if defined(ESP32S3) && !defined(ESP32S3BETA2)
-        if (ets_efuse_flash_octal_mode()) {
+        if (large_flash_mode) {
           res = SPIRead4B(1, addr, buf, n);
         } else {
           res = SPIRead(addr, (uint32_t *)buf, n);
@@ -152,7 +152,7 @@ int handle_flash_get_md5sum(uint32_t addr, uint32_t len) {
       n = FLASH_SECTOR_SIZE;
     }
     #if defined(ESP32S3) && !defined(ESP32S3BETA2)
-      if (ets_efuse_flash_octal_mode()) {
+      if (large_flash_mode) {
         res = SPIRead4B(1, addr, buf, n);
       } else {
         res = SPIRead(addr, (uint32_t *)buf, n);
@@ -186,6 +186,16 @@ esp_command_error handle_spi_attach(uint32_t hspi_config_arg)
          see https://github.com/themadinventor/esptool/issues/98 */
         SelectSpiFunction();
 #else
+        /* Stub calls spi_flash_attach automatically when it boots,
+          therefore, we need to "unattach" the flash before attaching again
+          with different configuration to avoid issues. */
+
+        // Configure the SPI flash pins back as classic GPIOs
+        PIN_FUNC_SELECT(PERIPHS_IO_MUX_SPICLK_U, FUNC_GPIO);
+        PIN_FUNC_SELECT(PERIPHS_IO_MUX_SPIQ_U, FUNC_GPIO);
+        PIN_FUNC_SELECT(PERIPHS_IO_MUX_SPID_U, FUNC_GPIO);
+        PIN_FUNC_SELECT(PERIPHS_IO_MUX_SPICS0_U, FUNC_GPIO);
+
         /* spi_flash_attach calls SelectSpiFunction() and another
            function to initialise SPI flash interface.
 
@@ -254,7 +264,14 @@ esp_command_error handle_get_security_info()
   uint8_t buf[SECURITY_INFO_BYTES];
   esp_command_error ret;
 
+  #ifdef ESP32C3
+  if (_rom_eco_version >= 7)
+    ret = GetSecurityInfoProcNewEco(NULL, NULL, buf);
+  else
+    ret = GetSecurityInfoProc(NULL, NULL, buf);
+  #else
   ret = GetSecurityInfoProc(NULL, NULL, buf);
+  #endif // ESP32C3
   if (ret == ESP_OK)
     SLIP_send_frame_data_buf(buf, sizeof(buf));
   return ret;
