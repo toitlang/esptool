@@ -126,7 +126,6 @@ jobs:
           echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
       - name: Create archive
-        id: artifact
         run: |
           mv ./${{ matrix.arch }} $ARCHIVE_NAME
           # Zip files lose the permissions of binaries, but that's what Espressif uses...
