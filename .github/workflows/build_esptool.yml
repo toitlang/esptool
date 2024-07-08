@@ -111,10 +111,17 @@ jobs:
         run: mv LICENSE README.md ./${{ env.DISTPATH }}
 
       - name: Create archive
-        id: artifact
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           # Zip files lose the permissions of binaries, but that's what Espressif uses...
           zip -r ${{ env.DISTPATH }}.zip ${{ env.DISTPATH }}
+
+      - name: Create archive for Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          7z a -tzip ${{ env.DISTPATH }}.zip ${{ env.DISTPATH }}
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4
