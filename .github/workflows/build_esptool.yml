@@ -71,11 +71,6 @@ jobs:
           pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico espsecure.py
           pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
 
-      - name: Set executable name
-        id: exe_path
-        run: |
-          echo "EXE_NAME=./${{ env.DISTPATH }}/esptool${{ matrix.EXTEN }}" >> $GITHUB_OUTPUT
-
       - name: Sign Windows binary
         if: (runner.os == 'Windows' && (github.event_name == 'release' || github.event.inputs.sign-windows == 'true'))
         uses: toitlang/action-code-sign@5da128f4fb4f719c1b667867815f6c31e743b111 # v1.1.0
@@ -85,7 +80,7 @@ jobs:
           certificate-password: ${{ secrets.DIGICERT_PASSWORD }}
           certificate-fingerprint: ${{ secrets.DIGICERT_FINGERPRINT }}
           keypair-alias: ${{ vars.DIGICERT_KEYPAIR_ALIAS }}
-          path: ${{ steps.exe_path.outputs.EXE_NAME }}
+          path: ${{ env.DISTPATH }}
 
       - name: Sign macOS binary
         if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
@@ -96,7 +91,11 @@ jobs:
           username: ${{ secrets.AC_USERNAME }}
           password: ${{ secrets.AC_PASSWORD }}
           apple-team-id: 33DS2ZRDST
-          app-path: ${{ steps.exe_path.outputs.EXE_NAME }}
+          app-path: |
+            ./${{ env.DISTPATH }}/esptool
+            ./${{ env.DISTPATH }}/espefuse
+            ./${{ env.DISTPATH }}/espsecure
+            ./${{ env.DISTPATH }}/esp_rfc2217_server
 
       - name: Test binaries
         shell: bash
