@@ -31,12 +31,12 @@ jobs:
           TARGET: macos-aarch64
           SEPARATOR: ':'
           RUN_ON: macos-latest
-        - platform: windows
+        - platform: windows-x64
           TARGET: windows-x64
           EXTEN: .exe
           SEPARATOR: ';'
           RUN_ON: windows-latest
-        - platform: linux-amd64
+        - platform: linux-x64
           TARGET: linux-x64
           SEPARATOR: ':'
           RUN_ON: ubuntu-20.04
