@@ -1,0 +1,139 @@
+name: Build esptool
+
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      sign-macos:
+        description: "Sign macOS executables"
+        required: false
+        type: boolean
+        default: false
+      sign-windows:
+        description: "Sign macOS executables"
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  build-esptool-binaries:
+    name: esptool - ${{ matrix.platform }}
+    runs-on: ${{ matrix.RUN_ON }}
+    strategy:
+      matrix:
+        platform: [macos-aarch64, macos-x64, windows-x64, linux-x64]
+        include:
+        - platform: macos-x64
+          TARGET: macos-x64
+          SEPARATOR: ':'
+          RUN_ON: macos-13
+        - platform: macos-aarch64
+          TARGET: macos-aarch64
+          SEPARATOR: ':'
+          RUN_ON: macos-latest
+        - platform: windows-x64
+          TARGET: windows-x64
+          EXTEN: .exe
+          SEPARATOR: ';'
+          RUN_ON: windows-latest
+        - platform: linux-x64
+          TARGET: linux-x64
+          SEPARATOR: ':'
+          RUN_ON: ubuntu-20.04
+
+    env:
+      DISTPATH: esptool-${{ matrix.TARGET }}
+      STUBS_DIR: ./esptool/targets/stub_flasher/
+      EFUSE_DIR: ./espefuse/efuse_defs/
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.8
+        # Skip setting python on ARM because of missing compatibility: https://github.com/actions/setup-python/issues/108
+        if: matrix.platform != 'linux-arm64'
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.8
+
+      - name: Install dependencies
+        # PyInstaller >=6.0 results in significantly more antivirus false positives
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller==5.13.2
+          pip install --user -e .
+
+      - name: Build with PyInstaller
+        run: |
+          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}*.json${{ matrix.SEPARATOR }}${{ env.STUBS_DIR }}" esptool.py
+          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.SEPARATOR }}${{ env.EFUSE_DIR }}" espefuse.py
+          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico espsecure.py
+          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
+
+      - name: Set executable name
+        id: exe_path
+        run: |
+          echo "EXE_NAME=./${{ env.DISTPATH }}/esptool${{ matrix.EXTEN }}" >> $GITHUB_OUTPUT
+
+      - name: Sign Windows binary
+        if: (runner.os == 'Windows' && (github.event_name == 'release' || github.event.inputs.sign-windows == 'true'))
+        uses: toitlang/action-code-sign@5da128f4fb4f719c1b667867815f6c31e743b111 # v1.1.0
+        with:
+          certificate: ${{ secrets.DIGICERT_CERTIFICATE }}
+          api-key: ${{ secrets.DIGICERT_API_KEY }}
+          certificate-password: ${{ secrets.DIGICERT_PASSWORD }}
+          certificate-fingerprint: ${{ secrets.DIGICERT_FINGERPRINT }}
+          keypair-alias: ${{ vars.DIGICERT_KEYPAIR_ALIAS }}
+          path: ${{ steps.exe_path.outputs.EXE_NAME }}
+
+      - name: Sign macOS binary
+        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
+        uses: toitlang/action-macos-sign-notarize@567fcd7c0b89e1b4d0fbc5132cce6e56224db1b7 # v1.2.0
+        with:
+          certificate: ${{ secrets.MACOS_CERTIFICATE }}
+          certificate-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+          username: ${{ secrets.AC_USERNAME }}
+          password: ${{ secrets.AC_PASSWORD }}
+          apple-team-id: 33DS2ZRDST
+          app-path: ${{ steps.exe_path.outputs.EXE_NAME }}
+
+      - name: Test binaries
+        shell: bash
+        run: |
+          ./${{ env.DISTPATH }}/esptool${{ matrix.EXTEN }} -h
+          ./${{ env.DISTPATH }}/espefuse${{ matrix.EXTEN }} -h
+          ./${{ env.DISTPATH }}/espsecure${{ matrix.EXTEN }} -h
+          ./${{ env.DISTPATH }}/esp_rfc2217_server${{ matrix.EXTEN }} -h
+
+      - name: Add license and readme
+        shell: bash
+        run: mv LICENSE README.md ./${{ env.DISTPATH }}
+
+      - name: Create archive
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          # Zip files lose the permissions of binaries, but that's what Espressif uses...
+          zip -r ${{ env.DISTPATH }}.zip ${{ env.DISTPATH }}
+
+      - name: Create archive for Windows
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          7z a -tzip ${{ env.DISTPATH }}.zip ${{ env.DISTPATH }}
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DISTPATH }}
+          path: ${{ env.DISTPATH }}.zip
+
+      - name: Upload release
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ env.DISTPATH }}.zip
+          tag: ${{ github.event.release.tag_name }}
+          overwrite: true
