@@ -17,7 +17,7 @@ on:
 
 jobs:
   build-esptool-binaries:
-    name: Build esptool binaries for ${{ matrix.platform }}
+    name: esptool - ${{ matrix.platform }}
     runs-on: ${{ matrix.RUN_ON }}
     strategy:
       matrix:

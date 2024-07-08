@@ -19,7 +19,7 @@ on:
 
 jobs:
   build-cross-esptool-binaries:
-    name: Build esptool binaries for ${{ matrix.arch }}
+    name: esptool - ${{ matrix.arch }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
