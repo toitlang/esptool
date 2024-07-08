@@ -19,7 +19,7 @@ on:
     types: [published]
 
 jobs:
-  build-esptool-binaries:
+  build-cross-esptool-binaries:
     name: Build esptool binaries for ${{ matrix.arch }}
     runs-on: ubuntu-latest
     strategy:
@@ -120,17 +120,13 @@ jobs:
           find ./${{ matrix.arch }}
           mv LICENSE README.md ./${{ matrix.arch }}
 
-      - name: Set archive variables (release)
-        if: github.event_name == 'release'
-        run: |
-          echo "ARCHIVE_NAME=esptool-${{ github.event.release.tag_name }}-linux-${{ matrix.arch }}" >> $GITHUB_ENV
-
       - name: Set archive variables
-        if: github.event_name != 'release'
         run: |
-          echo "ARCHIVE_NAME=esptool-${{ matrix.arch }}" >> $GITHUB_ENV
+          export ARCHIVE_NAME=esptool-linux-${{ matrix.arch }}
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
 
       - name: Create archive
+        id: artifact
         run: |
           mv ./${{ matrix.arch }} $ARCHIVE_NAME
           # Zip files lose the permissions of binaries, but that's what Espressif uses...
