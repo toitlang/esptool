@@ -47,6 +47,10 @@ jobs:
       EFUSE_DIR: ./espefuse/efuse_defs/
 
     steps:
+      - name: Show inputs
+        if: github.event_name == 'workflow_dispatch'
+        run: echo "${{ toJSON(github.event.inputs) }}"
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
