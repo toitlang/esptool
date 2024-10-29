@@ -76,12 +76,14 @@ jobs:
         if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
         uses: apple-actions/import-codesign-certs@v3
         with:
+          keychain: pyinstaller_signing_temp
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
       - name: Setup signing identity flag (macOS)
         if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
         run: |
+          security default-keychain -s pyinstaller_signing_temp.keychain
           echo "PYINSTALLER_FLAGS=--codesign-identity ${{ vars.MACOS_TEAM_ID }}" >> $GITHUB_ENV
 
       - name: Build with PyInstaller
