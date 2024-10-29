@@ -73,14 +73,14 @@ jobs:
           pip install --user -e .
 
       - name: Import signing keychain (macOS)
-        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-windows == 'true'))
+        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
         uses: apple-actions/import-codesign-certs@v3
         with:
           p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
           p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
 
       - name: Setup signing identity flag (macOS)
-        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-windows == 'true'))
+        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
         run: |
           echo "PYINSTALLER_FLAGS=--codesign-identity ${{ vars.MACOS_TEAM_ID }}" >> $GITHUB_ENV
 
