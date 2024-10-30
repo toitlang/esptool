@@ -47,6 +47,8 @@ jobs:
       DISTPATH: esptool-${{ matrix.TARGET }}
       STUBS_DIR: ./esptool/targets/stub_flasher/
       EFUSE_DIR: ./espefuse/efuse_defs/
+      # Might be changed to allow signing on macOS.
+      PYINSTALLER_FLAGS:
 
     steps:
       - name: Show inputs
@@ -70,12 +72,26 @@ jobs:
           pip install pyinstaller==5.13.2
           pip install --user -e .
 
+      - name: Import signing keychain (macOS)
+        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
+        uses: apple-actions/import-codesign-certs@v3
+        with:
+          keychain: pyinstaller_signing_temp
+          p12-file-base64: ${{ secrets.MACOS_CERTIFICATE }}
+          p12-password: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+
+      - name: Setup signing identity flag (macOS)
+        if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
+        run: |
+          security default-keychain -s pyinstaller_signing_temp.keychain
+          echo "PYINSTALLER_FLAGS=--codesign-identity ${{ vars.MACOS_TEAM_ID }}" >> $GITHUB_ENV
+
       - name: Build with PyInstaller
         run: |
-          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}*.json${{ matrix.SEPARATOR }}${{ env.STUBS_DIR }}" esptool.py
-          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.SEPARATOR }}${{ env.EFUSE_DIR }}" espefuse.py
-          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico espsecure.py
-          pyinstaller --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}*.json${{ matrix.SEPARATOR }}${{ env.STUBS_DIR }}" esptool.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.SEPARATOR }}${{ env.EFUSE_DIR }}" espefuse.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico espsecure.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
 
       - name: Sign Windows binary
         if: (runner.os == 'Windows' && (github.event_name == 'release' || github.event.inputs.sign-windows == 'true'))
