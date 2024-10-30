@@ -49,6 +49,7 @@ jobs:
       EFUSE_DIR: ./espefuse/efuse_defs/
       # Might be changed to allow signing on macOS.
       PYINSTALLER_FLAGS:
+      PIP_EXTRA_INDEX_URL: "https://dl.espressif.com/pypi"
 
     steps:
       - name: Show inputs
@@ -133,8 +134,6 @@ jobs:
 
       - name: Create archive
         if: runner.os != 'Windows'
-    env:
-      PIP_EXTRA_INDEX_URL: "https://dl.espressif.com/pypi"
         shell: bash
         run: |
           # Zip files lose the permissions of binaries, but that's what Espressif uses...
