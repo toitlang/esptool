@@ -19,7 +19,7 @@ on:
 
 jobs:
   build-esptool-binaries:
-    name: esptool - ${{ matrix.platform }}
+    name: Build esptool binaries for ${{ matrix.platform }}
     runs-on: ${{ matrix.RUN_ON }}
     strategy:
       matrix:
@@ -31,7 +31,6 @@ jobs:
           RUN_ON: macos-13
         - platform: macos-aarch64
           TARGET: macos-aarch64
-          SEPARATOR: ':'
           RUN_ON: macos-latest
         - platform: windows-x64
           TARGET: windows-x64
@@ -40,6 +39,10 @@ jobs:
           RUN_ON: windows-latest
         - platform: linux-x64
           TARGET: linux-x64
+          SEPARATOR: ':'
+          RUN_ON: ubuntu-20.04
+        - platform: linux-arm32
+        - platform: linux-arm64
           SEPARATOR: ':'
           RUN_ON: ubuntu-20.04
 
@@ -60,7 +63,7 @@ jobs:
 
       - name: Set up Python 3.8
         # Skip setting python on ARM because of missing compatibility: https://github.com/actions/setup-python/issues/108
-        if: matrix.platform != 'linux-arm64'
+        if: matrix.platform != 'linux-arm32' && matrix.platform != 'linux-arm64'
         uses: actions/setup-python@v5
         with:
           python-version: 3.8
@@ -88,7 +91,7 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}*.json${{ matrix.SEPARATOR }}${{ env.STUBS_DIR }}" esptool.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}1/*.json${{ matrix.SEPARATOR }}${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json${{ matrix.SEPARATOR }}${{ env.STUBS_DIR }}2/" esptool.py
           pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.SEPARATOR }}${{ env.EFUSE_DIR }}" espefuse.py
           pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico espsecure.py
           pyinstaller ${{ env.PYINSTALLER_FLAGS }} --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
@@ -133,6 +136,8 @@ jobs:
 
       - name: Create archive
         if: runner.os != 'Windows'
+    env:
+      PIP_EXTRA_INDEX_URL: "https://dl.espressif.com/pypi"
         shell: bash
         run: |
           # Zip files lose the permissions of binaries, but that's what Espressif uses...
