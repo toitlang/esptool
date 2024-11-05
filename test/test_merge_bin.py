@@ -31,7 +31,7 @@ def read_image(filename):
 
 @pytest.mark.host_test
 class TestMergeBin:
-    def run_merge_bin(self, chip, offsets_names, options=[]):
+    def run_merge_bin(self, chip, offsets_names, options=[], allow_warnings=False):
         """Run merge_bin on a list of (offset, filename) tuples
         with output to a named temporary file.
 
@@ -62,9 +62,10 @@ class TestMergeBin:
             )
             output = output.decode("utf-8")
             print(output)
-            assert (
-                "warning" not in output.lower()
-            ), "merge_bin should not output warnings"
+            if not allow_warnings:
+                assert (
+                    "warning" not in output.lower()
+                ), "merge_bin should not output warnings"
 
             with open(output_file.name, "rb") as f:
                 return f.read()
@@ -203,6 +204,7 @@ class TestMergeBin:
             "esp32",
             [(0x1000, "bootloader_esp32.bin")],
             options=["--format", "hex"],
+            allow_warnings=True,
         )
         # create a temp file with hex content
         with tempfile.NamedTemporaryFile(suffix=".hex", delete=False) as f:
@@ -233,6 +235,7 @@ class TestMergeBin:
                 (0x1000, "bootloader_esp32.bin"),
             ],
             options=["--format", "hex"],
+            allow_warnings=True,
         )
         lines = merged.splitlines()
         # hex format - :0300300002337A1E
@@ -247,7 +250,7 @@ class TestMergeBin:
         data_len = int(b"0x" + line[1:3], 16)
         # : + len + addr + type + data + checksum
         assert len(line) == 1 + 2 + 4 + 2 + data_len * 2 + 2
-        # last line is allways :00000001FF
+        # last line is always :00000001FF
         assert lines[-1] == b":00000001FF"
         # convert back and verify the result against the source bin file
         with tempfile.NamedTemporaryFile(suffix=".hex", delete=False) as hex:
@@ -262,6 +265,16 @@ class TestMergeBin:
         assert b"\xFF" * 0x1000 == merged_bin[:0x1000]
         # verify the file itself
         assert source == merged_bin[0x1000:]
+
+    def test_hex_header_raw_file(self):
+        # use raw binary file starting with colon
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b":")
+        try:
+            merged = self.run_merge_bin("esp32", [(0x0, f.name)])
+            assert merged == b":"
+        finally:
+            os.unlink(f.name)
 
 
 class UF2Block(object):
@@ -320,7 +333,7 @@ class TestUF2:
     def generate_binary(self, size):
         with tempfile.NamedTemporaryFile(delete=False) as f:
             for _ in range(size):
-                f.write(struct.pack("B", random.randrange(0, 1 << 8)))
+                f.write(struct.pack("B", random.randrange(0, 1 << 7)))
             return f.name
 
     @staticmethod

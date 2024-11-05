@@ -115,6 +115,11 @@ It is also possible to autodetect flash size by using ``ALL`` as size. The above
 
 .. note::
 
+    When using the ``read_flash`` command in combination with the ``--no-stub`` argument, it may be necessary to also set the ``--flash_size`` argument to ensure proper reading of the flash contents by the ROM.
+
+
+.. note::
+
     If ``write_flash`` updated the boot image's :ref:`flash mode and flash size <flash-modes>` during flashing then these bytes may be different when read back.
 
 .. _erase_flash:
@@ -187,7 +192,7 @@ The ``elf2image`` command converts an ELF file (from compiler/linker output) int
 This command does not require a serial connection.
 
 ``elf2image`` also accepts the `Flash Modes <#flash-modes>`__ arguments ``--flash_freq`` and ``--flash_mode``, which can be used to set the default values in the image header. This is important when generating any image which will be booted directly by the chip.
-These values can also be overwritten via the ``write_flash`` command, see the `write_flash command <#write-binary-data-to-flash-write-flash>`__ for details. However, if you want to overwrite these values via the ``write_flash`` command then use the ``--dont-append-digest`` argument of the ``elf2image`` command in order to skip appending a SHA256 digest after the image. The SHA256 digest would be invalidated by rewriting the image header, therefore, it is not allowed.
+These values can also be overwritten via the ``write_flash`` command, see the `write_flash command <#write-binary-data-to-flash-write-flash>`__ for details. Overwriting these values via the ``write_flash`` command will produce an image with a recalculated SHA256 digest, otherwise, the image SHA256 digest would be invalidated by rewriting the image header. There is an option to skip appending a SHA256 digest after the image with ``--dont-append-digest`` argument of the ``elf2image`` command.
 
 By default, ``elf2image`` uses the sections in the ELF file to generate each segment in the binary executable. To use segments (PHDRs) instead, pass the ``--use_segments`` option.
 
@@ -280,6 +285,11 @@ Intel Hex format offers distinct advantages when compared to the binary format, 
 
     esptool.py --chip {IDF_TARGET_NAME} merge_bin --format hex -o merged-flash.hex --flash_mode dio --flash_size 4MB 0x1000 bootloader.bin 0x8000 partition-table.bin 0x10000 app.bin
 
+.. note::
+
+    Please note that during the conversion to the `Intel Hex` format, the binary input file is treated as a black box. The conversion process does not consider the actual contents of the binary file. This means that the `Intel Hex` file will contain the same data as the binary file (including the padding), but the data will be represented in a different format.
+    When merging multiple files, the `Intel Hex` format, unlike the binary format, does not include any padding between the input files.
+    It is recommended to merge multiple files instead of converting one already merged to get smaller merged outputs.
 
 RAW Output Format
 ^^^^^^^^^^^^^^^^^
@@ -328,6 +338,7 @@ The following commands are less commonly used, or only of interest to advanced u
     *  :ref:`read-mem-write-mem`
     *  :ref:`read-flash-status`
     *  :ref:`write-flash-status`
+    *  :ref:`read-flash-sfdp`
     :esp8266: *  :ref:`chip-id`
     :esp8266: *  :ref:`make-image`
     :esp8266: *  :ref:`run`
