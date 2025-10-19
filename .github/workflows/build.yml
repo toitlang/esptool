@@ -1,0 +1,147 @@
+# Copyright (C) 2023 Toitware ApS.
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted.
+
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+# REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+# FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+# INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+# LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+# OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+# PERFORMANCE OF THIS SOFTWARE.
+
+name: Build esptool cross
+
+on:
+  push:
+  release:
+    types: [published]
+
+jobs:
+  build-cross-esptool-binaries:
+    name: esptool - ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [armv7, aarch64, riscv64]
+
+    env:
+      STUBS_DIR: ./esptool/targets/stub_flasher/
+      EFUSE_DIR: ./espefuse/efuse_defs/
+      PIP_EXTRA_INDEX_URL: "https://dl.espressif.com/pypi"
+
+    steps:
+      - name: Set Swap Space
+        uses: pierotofy/set-swap-space@v1.0
+        with:
+          swap-size-gb: 12
+
+      - name: Workaround cargo issue
+        run: |
+          # Workaround for https://github.com/rust-lang/cargo/issues/8719
+          sudo mkdir -p /var/lib/docker
+          sudo mount -t tmpfs -o size=12G none /var/lib/docker
+          sudo systemctl restart docker
+
+      - name: Checkout repository
+        uses: actions/checkout@master
+
+      # - name: Patch esptool requirements
+        # if: matrix.arch == 'riscv64'
+        # # We don't want to use the cryptography package that uses rust.
+        # # The rust that is installed on riscv64 is only 1.41.0, but the
+        # # cryptography package requires 1.48.0.
+        # # The latest version that can still be installed without rust is 3.4.8.
+        # run: |
+        #   sed -i 's/cryptography/cryptography<=3.4.8/' setup.py
+
+      - name: Create directory for artifacts
+        run: mkdir -p ${{ matrix.arch }}
+
+      - uses: uraimo/run-on-arch-action@v2
+        name: Build in ${{ matrix.arch }}
+        with:
+          arch: ${{ matrix.arch }}
+          distro: ubuntu22.04
+
+          githubToken: ${{ github.token }}
+
+          dockerRunArgs: |
+            --volume "${PWD}:/sources"
+
+          install: |
+            apt-get update -q -y
+            apt-get install -q -y --no-install-recommends \
+              python3 python3-pip python3-setuptools python3-wheel python3-dev \
+              libffi-dev \
+              libssl-dev \
+              rustc cargo \
+              build-essential \
+              pkg-config \
+              git \
+              curl \
+              wget \
+              unzip \
+              zip
+
+            apt install python-is-python3
+
+          shell: /bin/bash
+
+          run: |
+            adduser --disabled-password --gecos "" builder
+            chmod -R a+rwx /sources
+            su builder <<EOF
+            # The following line really speeds up cargo in the docker container.
+            # Via https://github.com/rust-lang/cargo/issues/10781#issuecomment-1351670409
+            export CARGO_NET_GIT_FETCH_WITH_CLI=true
+            set -e
+            export PATH=\$PATH:/home/builder/.local/bin
+            echo \$HOME
+            echo \$PATH
+            cd /sources
+            python -m pip install --upgrade pip
+            pip install pyinstaller
+            pip install --user -e .
+            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}1/*.json:${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json:${{ env.STUBS_DIR }}2/" esptool.py
+            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml:${{ env.EFUSE_DIR }}" espefuse.py
+            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico espsecure.py
+            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
+            ./${{ matrix.arch }}/esptool -h
+            ./${{ matrix.arch }}/espefuse -h
+            ./${{ matrix.arch }}/espsecure -h
+            ./${{ matrix.arch }}/esp_rfc2217_server -h
+            find ./${{ matrix.arch }}
+            EOF
+
+      - name: Add license and readme
+        shell: bash
+        run: |
+          find ./${{ matrix.arch }}
+          mv LICENSE README.md ./${{ matrix.arch }}
+
+      - name: Set archive variables
+        run: |
+          export ARCHIVE_NAME=esptool-linux-${{ matrix.arch }}
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+
+      - name: Create archive
+        run: |
+          mv ./${{ matrix.arch }} $ARCHIVE_NAME
+          tar c -vzf "$ARCHIVE_NAME.tar.gz" $ARCHIVE_NAME
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@master
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: ${{ env.ARCHIVE_NAME }}.tar.gz
+
+      - name: Upload release artifact
+        if: github.event_name == 'release'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ env.ARCHIVE_NAME }}.tar.gz
+          tag: ${{ github.ref }}
+          overwrite: true
