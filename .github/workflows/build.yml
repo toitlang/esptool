@@ -76,8 +76,6 @@ jobs:
               python3 python3-pip python3-setuptools python3-wheel python3-dev \
               libffi-dev \
               libssl-dev \
-              # Rust is installed via rustup below (apt version is too old for tibs).
-              # rustc cargo \
               build-essential \
               pkg-config \
               git \
