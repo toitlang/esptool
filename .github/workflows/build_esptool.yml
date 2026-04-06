@@ -90,10 +90,19 @@ jobs:
       - name: Install dependencies
         # Using 6.11.1 as it apparently leads to fewer antivirus false positives.
         # See: https://github.com/espressif/python-binary-action/blob/8f20755b770c5f9d03e9ce3002af330828fe473f/action.yml#L35
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller==6.11.1
-          pip install --user -e .
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            # Force building native extensions as universal2 fat binaries.
+            # Without this, pip downloads arm64-only wheels on ARM runners,
+            # which PyInstaller rejects for universal2 builds.
+            export ARCHFLAGS="-arch x86_64 -arch arm64"
+            pip install --user --no-binary :all: -e .
+          else
+            pip install --user -e .
+          fi
 
       - name: Import signing keychain (macOS)
         if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
