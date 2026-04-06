@@ -79,11 +79,12 @@ jobs:
           python -m pip install --upgrade pip
           pip install pyinstaller==6.11.1
           if [[ "${{ runner.os }}" == "macOS" ]]; then
-            # Force building native extensions as universal2 fat binaries.
-            # Without this, pip downloads arm64-only wheels on ARM runners,
-            # which PyInstaller rejects for universal2 builds.
+            # Pip on ARM runners prefers arm64-only wheels over universal2,
+            # which PyInstaller rejects for universal2 builds. Rebuild only
+            # the packages that don't publish universal2 wheels from source.
             export ARCHFLAGS="-arch x86_64 -arch arm64"
-            pip install --user --no-binary :all: -e .
+            pip install --user -e .
+            pip install --user --force-reinstall --no-binary bitarray,cffi,pyyaml,tibs bitarray cffi pyyaml tibs
           else
             pip install --user -e .
           fi
