@@ -23,12 +23,9 @@ jobs:
     runs-on: ${{ matrix.runner }}
     strategy:
       matrix:
-        platform: [macos-aarch64, macos-amd64, windows-amd64, linux-amd64]
+        platform: [macos-universal, windows-amd64, linux-amd64]
         include:
-          - platform: macos-amd64
-            separator: ":"
-            runner: macos-13
-          - platform: macos-aarch64
+          - platform: macos-universal
             separator: ":"
             runner: macos-latest
           - platform: windows-amd64
@@ -77,10 +74,21 @@ jobs:
       - name: Install dependencies
         # Using 6.11.1 as it apparently leads to fewer antivirus false positives.
         # See: https://github.com/espressif/python-binary-action/blob/8f20755b770c5f9d03e9ce3002af330828fe473f/action.yml#L35
+        shell: bash
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller==6.11.1
-          pip install --user -e .
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            # Pip on ARM runners prefers arm64-only wheels over universal2,
+            # which PyInstaller rejects for universal2 builds. Rebuild
+            # native extensions from source as fat binaries.
+            rustup target add x86_64-apple-darwin
+            export ARCHFLAGS="-arch x86_64 -arch arm64"
+            pip install --user -e .
+            pip install --user --force-reinstall --no-binary bitarray,cffi,pyyaml,tibs bitarray cffi pyyaml tibs
+          else
+            pip install --user -e .
+          fi
 
       - name: Import signing keychain (macOS)
         if: (runner.os == 'macOS' && (github.event_name == 'release' || github.event.inputs.sign-macos == 'true'))
@@ -97,11 +105,17 @@ jobs:
           echo "PYINSTALLER_FLAGS=--codesign-identity ${{ vars.MACOS_TEAM_ID }}" >> $GITHUB_ENV
 
       - name: Build with PyInstaller
+        shell: bash
         run: |
-          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}1/*.json${{ matrix.separator }}${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json${{ matrix.separator }}${{ env.STUBS_DIR }}2/" --runtime-hook fix_encoding.py esptool.py
-          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.separator }}${{ env.EFUSE_DIR }}" --runtime-hook fix_encoding.py espefuse.py
-          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --runtime-hook fix_encoding.py espsecure.py
-          pyinstaller ${{ env.PYINSTALLER_FLAGS }} --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --runtime-hook fix_encoding.py esp_rfc2217_server.py
+          EXTRA_FLAGS=""
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            EXTRA_FLAGS="--target-architecture universal2"
+          fi
+          # bitstring uses dynamic imports that PyInstaller can't detect; collect all submodules explicitly.
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.STUBS_DIR }}1/*.json${{ matrix.separator }}${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json${{ matrix.separator }}${{ env.STUBS_DIR }}2/" --runtime-hook fix_encoding.py esptool.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.separator }}${{ env.EFUSE_DIR }}" --runtime-hook fix_encoding.py espefuse.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --runtime-hook fix_encoding.py espsecure.py
+          pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --runtime-hook fix_encoding.py esp_rfc2217_server.py
 
       - name: Sign Windows binary
         if: (runner.os == 'Windows' && (github.event_name == 'release' || github.event.inputs.sign-windows == 'true'))
@@ -139,6 +153,15 @@ jobs:
           ./${{ env.DISTPATH }}/espsecure$EXTEN -h
           ./${{ env.DISTPATH }}/esp_rfc2217_server$EXTEN -h
 
+      - name: Verify universal2 binaries (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          for bin in esptool espefuse espsecure esp_rfc2217_server; do
+            echo "Checking $bin..."
+            lipo -info ./${{ env.DISTPATH }}/$bin
+            arch -x86_64 ./${{ env.DISTPATH }}/$bin -h
+          done
+
       - name: Add license and readme
         shell: bash
         run: mv LICENSE README.md ./${{ env.DISTPATH }}
@@ -166,5 +189,29 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: ${{ env.ARCHIVE_NAME }}
+          tag: ${{ github.event.release.tag_name }}
+          overwrite: true
+
+      - name: Upload macOS release aliases
+        if: github.event_name == 'release' && runner.os == 'macOS'
+        shell: bash
+        run: |
+          for alias in macos-aarch64 macos-amd64; do
+            cp "${{ env.ARCHIVE_NAME }}" "esptool-${alias}.tar.gz"
+          done
+      - name: Upload macOS release (macos-aarch64)
+        if: github.event_name == 'release' && runner.os == 'macOS'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: esptool-macos-aarch64.tar.gz
+          tag: ${{ github.event.release.tag_name }}
+          overwrite: true
+      - name: Upload macOS release (macos-amd64)
+        if: github.event_name == 'release' && runner.os == 'macOS'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: esptool-macos-amd64.tar.gz
           tag: ${{ github.event.release.tag_name }}
           overwrite: true
