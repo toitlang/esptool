@@ -80,8 +80,9 @@ jobs:
           pip install pyinstaller==6.11.1
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             # Pip on ARM runners prefers arm64-only wheels over universal2,
-            # which PyInstaller rejects for universal2 builds. Rebuild only
-            # the packages that don't publish universal2 wheels from source.
+            # which PyInstaller rejects for universal2 builds. Rebuild
+            # native extensions from source as fat binaries.
+            rustup target add x86_64-apple-darwin
             export ARCHFLAGS="-arch x86_64 -arch arm64"
             pip install --user -e .
             pip install --user --force-reinstall --no-binary bitarray,cffi,pyyaml,tibs bitarray cffi pyyaml tibs
