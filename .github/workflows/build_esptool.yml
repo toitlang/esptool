@@ -60,13 +60,18 @@ jobs:
       - name: Set up Python 3.13 (universal2, macOS)
         if: runner.os == 'macOS'
         run: |
-          # setup-python installs arm64-only Python, but we need universal2
-          # so that all native extensions are fat binaries for PyInstaller.
+          # setup-python installs universal2 Python, but pip still selects
+          # arm64-only wheels on ARM runners. The python.org framework build
+          # ensures pip installs universal2 native extensions.
           curl -L -o python-installer.pkg \
             "https://www.python.org/ftp/python/3.13.3/python-3.13.3-macos11.pkg"
           sudo installer -pkg python-installer.pkg -target /
-          # The python.org installer places Python in /Library/Frameworks.
-          echo "/Library/Frameworks/Python.framework/Versions/3.13/bin" >> $GITHUB_PATH
+          # The python.org installer places binaries in /Library/Frameworks.
+          # Create symlinks for 'python' and 'pip' so they work without the '3' suffix.
+          BINDIR=/Library/Frameworks/Python.framework/Versions/3.13/bin
+          ln -sf "$BINDIR/python3" "$BINDIR/python"
+          ln -sf "$BINDIR/pip3" "$BINDIR/pip"
+          echo "$BINDIR" >> $GITHUB_PATH
 
       - name: Set up Python 3.13
         uses: actions/setup-python@v5
