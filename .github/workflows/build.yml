@@ -106,6 +106,7 @@ jobs:
             python -m pip install --upgrade pip
             pip install pyinstaller
             pip install --user -e .
+            # bitstring uses dynamic imports that PyInstaller can't detect; collect all submodules explicitly.
             pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.STUBS_DIR }}1/*.json:${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json:${{ env.STUBS_DIR }}2/" esptool.py
             pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.EFUSE_DIR }}*.yaml:${{ env.EFUSE_DIR }}" espefuse.py
             pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico espsecure.py

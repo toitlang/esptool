@@ -111,6 +111,7 @@ jobs:
           if [[ "${{ runner.os }}" == "macOS" ]]; then
             EXTRA_FLAGS="--target-architecture universal2"
           fi
+          # bitstring uses dynamic imports that PyInstaller can't detect; collect all submodules explicitly.
           pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.STUBS_DIR }}1/*.json${{ matrix.separator }}${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json${{ matrix.separator }}${{ env.STUBS_DIR }}2/" --runtime-hook fix_encoding.py esptool.py
           pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.EFUSE_DIR }}*.yaml${{ matrix.separator }}${{ env.EFUSE_DIR }}" --runtime-hook fix_encoding.py espefuse.py
           pyinstaller ${{ env.PYINSTALLER_FLAGS }} $EXTRA_FLAGS --console --distpath ./${{ env.DISTPATH }} -F --icon=ci/espressif.ico --runtime-hook fix_encoding.py espsecure.py
