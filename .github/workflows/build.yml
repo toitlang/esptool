@@ -76,7 +76,8 @@ jobs:
               python3 python3-pip python3-setuptools python3-wheel python3-dev \
               libffi-dev \
               libssl-dev \
-              rustc cargo \
+              # Rust is installed via rustup below (apt version is too old for tibs).
+              # rustc cargo \
               build-essential \
               pkg-config \
               git \
@@ -97,6 +98,9 @@ jobs:
             # Via https://github.com/rust-lang/cargo/issues/10781#issuecomment-1351670409
             export CARGO_NET_GIT_FETCH_WITH_CLI=true
             set -e
+            # Install Rust via rustup (apt version is too old for tibs edition2024).
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            source "\$HOME/.cargo/env"
             export PATH=\$PATH:/home/builder/.local/bin
             echo \$HOME
             echo \$PATH
@@ -104,8 +108,8 @@ jobs:
             python -m pip install --upgrade pip
             pip install pyinstaller
             pip install --user -e .
-            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --add-data="${{ env.STUBS_DIR }}1/*.json:${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json:${{ env.STUBS_DIR }}2/" esptool.py
-            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --add-data="${{ env.EFUSE_DIR }}*.yaml:${{ env.EFUSE_DIR }}" espefuse.py
+            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.STUBS_DIR }}1/*.json:${{ env.STUBS_DIR }}1/" --add-data="${{ env.STUBS_DIR }}2/*.json:${{ env.STUBS_DIR }}2/" esptool.py
+            pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico --collect-submodules bitstring --add-data="${{ env.EFUSE_DIR }}*.yaml:${{ env.EFUSE_DIR }}" espefuse.py
             pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico espsecure.py
             pyinstaller --distpath ./${{ matrix.arch }} -F --icon=ci/espressif.ico esp_rfc2217_server.py
             ./${{ matrix.arch }}/esptool -h
