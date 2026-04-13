@@ -197,7 +197,10 @@ jobs:
         shell: bash
         run: |
           for alias in macos-aarch64 macos-amd64; do
-            cp "${{ env.ARCHIVE_NAME }}" "esptool-${alias}.tar.gz"
+            alias_dir="esptool-${alias}"
+            cp -R "${{ env.DISTPATH }}" "${alias_dir}"
+            tar c -vzf "esptool-${alias}.tar.gz" "${alias_dir}"
+            rm -rf "${alias_dir}"
           done
       - name: Upload macOS release (macos-aarch64)
         if: github.event_name == 'release' && runner.os == 'macOS'
